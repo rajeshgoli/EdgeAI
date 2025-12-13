@@ -4,52 +4,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Edge.ai | Algorithmic Backtester</title>
+  <title>Edge.ai - Tactical Backtester</title>
 
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
-    rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
 
   <style>
     body {
-      background-color: #050505;
+      font-family: 'Inter', sans-serif;
+      background-color: #030712; /* Slate 950 */
       color: #e2e8f0;
       overflow: hidden;
-      /* Prevent scrolling on the main window */
     }
-
-    /* Custom Scrollbar */
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom scrollbar for fintech feel */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
     }
-
     ::-webkit-scrollbar-track {
-      background: #0a0a0f;
+      background: #0f172a;
     }
-
     ::-webkit-scrollbar-thumb {
       background: #334155;
       border-radius: 3px;
     }
-
     ::-webkit-scrollbar-thumb:hover {
       background: #475569;
-    }
-
-    .glass-panel {
-      background: rgba(19, 19, 31, 0.7);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .neon-glow {
-      box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
-    }
-
-    .neon-text {
-      text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
     }
   </style>
   <script type="importmap">

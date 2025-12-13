@@ -5,6 +5,7 @@ import { Candle, PriceLevel } from '../types';
 interface ChartProps {
   data: Candle[];
   lines?: PriceLevel[];
+  onVisibleRangeChange?: (high: number, low: number, currentPrice: number) => void;
   colors?: {
     backgroundColor?: string;
     lineColor?: string;
@@ -18,23 +19,37 @@ export interface ChartHandle {
   updateData: (newData: Candle[]) => void;
   appendData: (newData: Candle[]) => void;
   reset: () => void;
+  getScreenshot: () => string | null;
+  getVisibleRange: () => { high: number; low: number; currentPrice: number } | null;
 }
 
 const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
-  const { data, lines = [], colors: {
+  const { data, lines = [], onVisibleRangeChange, colors: {
     backgroundColor = 'transparent',
-    textColor = '#ffffff',
+    textColor = '#94a3b8',
   } = {} } = props;
+
+  const dataRef = useRef<Candle[]>(data);
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
 
+  // Keep data ref updated
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   useImperativeHandle(ref, () => ({
     updateData: (newData: Candle[]) => {
       if (seriesRef.current) {
-        seriesRef.current.setData(newData as CandlestickData[]);
+        const sortedData = [...newData].sort((a, b) => (a.time > b.time ? 1 : -1));
+        const uniqueData = sortedData.filter((item, index, self) =>
+          index === 0 || item.time !== self[index - 1].time
+        );
+        seriesRef.current.setData(uniqueData as CandlestickData[]);
+        dataRef.current = newData;
         chartRef.current?.timeScale().fitContent();
       }
     },
@@ -43,15 +58,45 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
         newData.forEach(d => {
           seriesRef.current?.update(d as CandlestickData);
         });
+        dataRef.current = [...dataRef.current, ...newData];
       }
     },
     reset: () => {
       if (seriesRef.current) {
         seriesRef.current.setData([]);
+        dataRef.current = [];
         // Clear lines on reset
         priceLinesRef.current.forEach(line => seriesRef.current?.removePriceLine(line));
         priceLinesRef.current = [];
       }
+    },
+    getScreenshot: () => {
+      if (chartContainerRef.current) {
+        const canvas = chartContainerRef.current.querySelector('canvas');
+        if (canvas) {
+          return canvas.toDataURL('image/png');
+        }
+      }
+      return null;
+    },
+    getVisibleRange: () => {
+      if (!chartRef.current || !seriesRef.current || dataRef.current.length === 0) return null;
+
+      const timeScale = chartRef.current.timeScale();
+      const visibleRange = timeScale.getVisibleLogicalRange();
+      if (!visibleRange) return null;
+
+      const startIdx = Math.max(0, Math.floor(visibleRange.from));
+      const endIdx = Math.min(dataRef.current.length - 1, Math.ceil(visibleRange.to));
+
+      const visibleData = dataRef.current.slice(startIdx, endIdx + 1);
+      if (visibleData.length === 0) return null;
+
+      const high = Math.max(...visibleData.map(d => d.high));
+      const low = Math.min(...visibleData.map(d => d.low));
+      const currentPrice = dataRef.current[dataRef.current.length - 1].close;
+
+      return { high, low, currentPrice };
     }
   }));
 
@@ -64,24 +109,31 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
         textColor,
       },
       grid: {
-        vertLines: { color: 'rgba(33, 150, 243, 0.3)' },
-        horzLines: { color: 'rgba(33, 150, 243, 0.3)' },
+        vertLines: { color: 'rgba(51, 65, 85, 0.2)' },
+        horzLines: { color: 'rgba(51, 65, 85, 0.2)' },
       },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
+      crosshair: {
+        mode: 1, // CrosshairMode.Normal
+      },
       timeScale: {
-        borderColor: '#2B2B43',
+        borderColor: 'rgba(51, 65, 85, 0.4)',
         timeVisible: true,
+        secondsVisible: false,
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(51, 65, 85, 0.4)',
       },
     });
 
     chartRef.current = chart;
 
     const newSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
+      upColor: '#10b981', // Emerald 500
+      downColor: '#ef4444', // Red 500
       borderVisible: false,
-      wickUpColor: '#22c55e',
+      wickUpColor: '#10b981',
       wickDownColor: '#ef4444',
     });
 
@@ -89,8 +141,12 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
 
     // Initial Data
     if (data.length > 0) {
+      // Sort and deduplicate data
       const sortedData = [...data].sort((a, b) => (a.time > b.time ? 1 : -1));
-      newSeries.setData(sortedData as CandlestickData[]);
+      const uniqueData = sortedData.filter((item, index, self) =>
+        index === 0 || item.time !== self[index - 1].time
+      );
+      newSeries.setData(uniqueData as CandlestickData[]);
       chart.timeScale().fitContent();
     }
 
@@ -102,11 +158,38 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
 
     window.addEventListener('resize', handleResize);
 
+    // Subscribe to visible range changes for dynamic Goldbach updates
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const handleVisibleRangeChange = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (!onVisibleRangeChange || dataRef.current.length === 0) return;
+
+        const visibleRange = chart.timeScale().getVisibleLogicalRange();
+        if (!visibleRange) return;
+
+        const startIdx = Math.max(0, Math.floor(visibleRange.from));
+        const endIdx = Math.min(dataRef.current.length - 1, Math.ceil(visibleRange.to));
+
+        const visibleData = dataRef.current.slice(startIdx, endIdx + 1);
+        if (visibleData.length === 0) return;
+
+        const high = Math.max(...visibleData.map(d => d.high));
+        const low = Math.min(...visibleData.map(d => d.low));
+        const currentPrice = dataRef.current[dataRef.current.length - 1].close;
+
+        onVisibleRangeChange(high, low, currentPrice);
+      }, 300); // Debounce 300ms
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      clearTimeout(debounceTimer);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
       chart.remove();
     };
-  }, []);
+  }, [onVisibleRangeChange]);
 
   // Handle Price Lines
   useEffect(() => {
@@ -118,6 +201,11 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
 
     // Add new lines
     lines.forEach(line => {
+      if (typeof line.price !== 'number' || isNaN(line.price)) {
+        console.warn('Invalid price line skipped:', line);
+        return;
+      }
+
       const priceLine = seriesRef.current?.createPriceLine({
         price: line.price,
         color: line.color,

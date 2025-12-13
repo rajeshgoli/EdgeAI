@@ -1,6 +1,6 @@
 import React from 'react';
-import { Dices, BrainCircuit, Eye } from 'lucide-react';
 import { GameState } from '../types';
+import { Dices, BrainCircuit, Eye } from 'lucide-react';
 
 interface ControlBarProps {
   gameState: GameState;
@@ -10,53 +10,64 @@ interface ControlBarProps {
   onReset: () => void;
 }
 
-const ControlBar: React.FC<ControlBarProps> = ({ gameState, onSpin, onAnalyze, onReveal, onReset }) => {
-  return (
-    <div className="h-24 bg-edge-800 border-t border-edge-700 flex items-center justify-center space-x-8 px-8 z-20 shadow-2xl">
+const ControlBar: React.FC<ControlBarProps> = ({ gameState, onSpin, onAnalyze, onReveal }) => {
 
-      {/* Spin Button */}
+  const isSpinDisabled = gameState === 'ANALYZING';
+  const isAnalyzeDisabled = gameState !== 'READY';
+  const isRevealDisabled = gameState !== 'ANALYZED';
+
+  return (
+    <div className="h-24 bg-[#0f172a] border-t border-slate-800/50 flex items-center justify-center gap-6">
+
+      {/* SPIN Button */}
       <button
         onClick={onSpin}
-        disabled={gameState === 'ANALYZING'}
+        disabled={isSpinDisabled}
         className={`
-          group relative px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 flex items-center
-          ${gameState === 'IDLE' || gameState === 'REVEALED'
-            ? 'bg-white text-black hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]'
-            : 'bg-edge-700 text-slate-500 cursor-not-allowed opacity-50'}
+          flex items-center justify-center gap-2.5 h-12 px-8 rounded-full font-medium text-sm transition-all
+          ${isSpinDisabled
+            ? 'bg-slate-700/40 text-slate-500 cursor-not-allowed'
+            : 'bg-slate-700 hover:bg-slate-600 text-white'}
         `}
       >
-        <Dices className="mr-2" size={24} />
-        {gameState === 'REVEALED' ? 'SPIN AGAIN' : 'SPIN MARKET'}
+        <Dices className="w-4 h-4" />
+        SPIN
       </button>
 
-      {/* Analyze Button */}
+      {/* ANALYZE Button */}
       <button
         onClick={onAnalyze}
-        disabled={gameState !== 'READY'}
+        disabled={isAnalyzeDisabled}
         className={`
-          group relative px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 flex items-center
-          ${gameState === 'READY'
-            ? 'bg-edge-neon text-black hover:scale-105 hover:shadow-[0_0_20px_rgba(0,255,157,0.4)]'
-            : 'bg-edge-700 text-slate-500 cursor-not-allowed opacity-50'}
+          flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-medium text-sm transition-all
+          ${isAnalyzeDisabled
+            ? 'bg-slate-700/40 text-slate-500 cursor-not-allowed'
+            : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40'}
         `}
       >
-        <BrainCircuit className={`mr-2 ${gameState === 'ANALYZING' ? 'animate-pulse' : ''}`} size={24} />
-        {gameState === 'ANALYZING' ? 'ANALYZING...' : 'ANALYZE'}
+        {gameState === 'ANALYZING' ? (
+          <span className="animate-pulse">ANALYZING...</span>
+        ) : (
+          <>
+            <BrainCircuit className="w-4 h-4" />
+            ANALYZE
+          </>
+        )}
       </button>
 
-      {/* Reveal Button */}
+      {/* REVEAL Button */}
       <button
         onClick={onReveal}
-        disabled={gameState !== 'ANALYZED'}
+        disabled={isRevealDisabled}
         className={`
-          group relative px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 flex items-center
-          ${gameState === 'ANALYZED'
-            ? 'bg-edge-accent text-white hover:scale-105 hover:shadow-[0_0_20px_rgba(59,130,246,0.5)]'
-            : 'bg-edge-700 text-slate-500 cursor-not-allowed opacity-50'}
+          flex items-center justify-center gap-2.5 h-12 px-8 rounded-full font-medium text-sm transition-all
+          ${isRevealDisabled
+            ? 'bg-transparent text-slate-600 cursor-not-allowed border border-slate-700/50'
+            : 'bg-slate-700 hover:bg-slate-600 text-white'}
         `}
       >
-        <Eye className="mr-2" size={24} />
-        REVEAL FUTURE
+        <Eye className="w-4 h-4" />
+        REVEAL
       </button>
 
     </div>

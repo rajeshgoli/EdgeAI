@@ -1,25 +1,6 @@
-const API_URL = 'http://localhost:8003';
+import { Candle, AnalysisResult, SpinResponse, GoldbachLevelsResponse } from '../types';
 
-export interface Candle {
-    time: number; // Unix timestamp
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume?: number;
-}
-
-export interface SpinResponse {
-    past_data: Candle[];
-    future_data: Candle[];
-}
-
-export interface AnalysisResult {
-    sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    narrative: string;
-    key_level?: number;
-    goldbach_levels?: { value: number; label: string; color: string }[];
-}
+const API_URL = 'http://localhost:8000';
 
 export const spinWheel = async (): Promise<SpinResponse> => {
     const response = await fetch(`${API_URL}/spin`);
@@ -44,7 +25,18 @@ export const compileStrategy = async (file: File): Promise<{ persona: string }> 
     return response.json();
 };
 
-export const analyzeMarket = async (chartData: Candle[], strategyPersona?: string): Promise<AnalysisResult> => {
+export const analyzeMarket = async (
+    chartData: Candle[],
+    strategyPersona?: string,
+    chartScreenshot?: string
+): Promise<AnalysisResult> => {
+    console.log("analyzeMarket called with:", {
+        chartDataLength: chartData.length,
+        hasPersona: !!strategyPersona,
+        hasScreenshot: !!chartScreenshot,
+        screenshotSize: chartScreenshot?.length || 0
+    });
+
     const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         headers: {
@@ -53,11 +45,42 @@ export const analyzeMarket = async (chartData: Candle[], strategyPersona?: strin
         body: JSON.stringify({
             chart_data: chartData,
             strategy_persona: strategyPersona,
+            chart_screenshot: chartScreenshot,
+        }),
+    });
+
+    console.log("API response status:", response.status);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API error response:", errorText);
+        throw new Error(`Failed to analyze market: ${response.status} ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log("API response data:", result);
+    return result;
+};
+
+export const getGoldbachLevels = async (
+    visibleHigh: number,
+    visibleLow: number,
+    currentPrice: number
+): Promise<GoldbachLevelsResponse> => {
+    const response = await fetch(`${API_URL}/goldbach_levels`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            visible_high: visibleHigh,
+            visible_low: visibleLow,
+            current_price: currentPrice,
         }),
     });
 
     if (!response.ok) {
-        throw new Error('Failed to analyze market');
+        throw new Error('Failed to get Goldbach levels');
     }
     return response.json();
 };

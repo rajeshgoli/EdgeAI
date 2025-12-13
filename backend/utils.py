@@ -28,6 +28,12 @@ def load_csv(file_path: str = DATA_PATH) -> pd.DataFrame:
     # Convert to unix timestamp for Lightweight Charts (seconds)
     df['time'] = df['datetime'].astype('int64') // 10**9
     
+    # Drop duplicates based on time
+    df = df.drop_duplicates(subset=['time'])
+    
+    # Sort by time
+    df = df.sort_values(by='time')
+    
     return df
 
 def get_random_slice(df: pd.DataFrame, past: int = 100, future: int = 20):

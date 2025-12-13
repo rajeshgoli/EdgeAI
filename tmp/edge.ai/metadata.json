@@ -1,0 +1,5 @@
+{
+  "name": "Edge.ai",
+  "description": "A gamified high-frequency trading backtester with simulated AI strategy analysis.",
+  "requestFramePermissions": []
+}

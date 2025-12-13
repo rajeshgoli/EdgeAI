@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -10,8 +10,8 @@ load_dotenv()
 import google.generativeai as genai
 
 from utils import load_csv, get_random_slice, get_latest_slice
-from goldbach import calculate_goldbach_levels
-from ai_engine import compile_strategy, analyze_chart
+from goldbach import run_goldbach_analysis, calculate_goldbach_for_range
+from ai_engine import compile_strategy, analyze_chart, analyze_chart_with_goldbach
 
 # Initialize App
 app = FastAPI(title="Edge.ai Backend")
@@ -48,12 +48,25 @@ class SpinResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     chart_data: List[dict]
     strategy_persona: Optional[str] = None
+    chart_screenshot: Optional[str] = None  # Base64 encoded image
 
 class AnalyzeResponse(BaseModel):
     sentiment: str
     narrative: str
     key_level: Optional[float]
     goldbach_levels: Optional[List[dict]] = None
+    dealing_range: Optional[Dict[str, Any]] = None
+    current_status: Optional[Dict[str, Any]] = None
+    signals: Optional[List[Dict[str, Any]]] = None
+
+class GoldbachLevelsRequest(BaseModel):
+    visible_high: float
+    visible_low: float
+    current_price: float
+
+class GoldbachLevelsResponse(BaseModel):
+    levels: List[dict]
+    dealing_range: Dict[str, Any]
 
 # --- Endpoints ---
 
@@ -62,14 +75,23 @@ class AnalyzeResponse(BaseModel):
 async def root():
     return {"message": "Edge.ai Backend is running", "status": "ok"}
 
+@app.post("/goldbach_levels", response_model=GoldbachLevelsResponse)
+async def get_goldbach_levels(request: GoldbachLevelsRequest):
+    """Calculate Goldbach levels based on visible chart range (for dynamic zoom updates)"""
+    result = calculate_goldbach_for_range(
+        request.visible_high,
+        request.visible_low,
+        request.current_price
+    )
+    return result
+
 @app.get("/spin", response_model=SpinResponse)
 async def spin_wheel():
     if df is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
-    
-    # past, future = get_random_slice(df)
-    # Use get_latest_slice as requested by user
-    past, future = get_latest_slice(df, n=1000)
+
+    # Use get_random_slice to get past data (visible) and future data (hidden for reveal)
+    past, future = get_random_slice(df, past=200, future=50)
     return {"past_data": past, "future_data": future}
 
 @app.post("/compile_strategy")
@@ -77,41 +99,56 @@ async def api_compile_strategy(file: UploadFile = File(...)):
     content = await file.read()
     text = content.decode("utf-8", errors="ignore") # Simple decoding for now
     
-    # In a real app, we'd use a PDF parser like PyPDF2 or LlamaParse
-    # For hackathon speed, if it's a text file or we just treat it as text
-    # If it's actual PDF binary, we need to parse it. 
-    # Let's assume for MVP the user uploads a .txt or we try to extract text.
-    
-    # TODO: Add basic PDF parsing if time permits, for now assume text-based upload or extract strings
-    if file.filename.endswith(".pdf"):
-        # Very basic "is it a PDF" check. 
-        # For the MVP, let's just use the AI to "read" the raw bytes if it's small, 
-        # or better, just ask the user to upload text/markdown for the strategy.
-        # OR: Use a library. Let's stick to text for simplicity unless requested.
-        pass
+    # Check for Goldbach Trigger
+    if file.filename.lower().startswith("goldbach") and file.filename.lower().endswith(".pdf"):
+        return {"persona": "GOLDBACH_MODE"}
 
+    # Default AI Compilation
     persona = compile_strategy(text)
     return {"persona": persona}
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
-    # Mode A: Goldbach (No Persona)
-    if not request.strategy_persona:
-        levels = calculate_goldbach_levels(request.chart_data)
+    # Mode A: Goldbach (Explicit or Default)
+    if request.strategy_persona == "GOLDBACH_MODE" or not request.strategy_persona:
+        # Run mathematical Goldbach analysis first
+        goldbach_result = run_goldbach_analysis(request.chart_data)
+
+        # If we have a screenshot, enhance with AI vision analysis
+        if request.chart_screenshot:
+            ai_enhanced = analyze_chart_with_goldbach(
+                request.chart_data,
+                goldbach_result,
+                request.chart_screenshot
+            )
+            return {
+                "sentiment": ai_enhanced.get("sentiment", goldbach_result.get("sentiment", "NEUTRAL")),
+                "narrative": ai_enhanced.get("narrative", goldbach_result.get("narrative", "")),
+                "key_level": None,
+                "goldbach_levels": goldbach_result.get("levels_to_draw", []),
+                "dealing_range": goldbach_result.get("dealing_range"),
+                "current_status": goldbach_result.get("current_status"),
+                "signals": goldbach_result.get("signals")
+            }
+
+        # No screenshot - return pure mathematical analysis
         return {
-            "sentiment": "NEUTRAL",
-            "narrative": "Goldbach Levels Calculated. Watch for reactions at 0.11, 0.50, and 0.89.",
+            "sentiment": goldbach_result.get("sentiment", "NEUTRAL"),
+            "narrative": goldbach_result.get("narrative", "Goldbach Analysis Complete"),
             "key_level": None,
-            "goldbach_levels": levels
+            "goldbach_levels": goldbach_result.get("levels_to_draw", []),
+            "dealing_range": goldbach_result.get("dealing_range"),
+            "current_status": goldbach_result.get("current_status"),
+            "signals": goldbach_result.get("signals")
         }
-    
-    # Mode B: AI Analysis
-    ai_result = analyze_chart(request.chart_data, request.strategy_persona)
+
+    # Mode B: AI Analysis with optional screenshot
+    ai_result = analyze_chart(request.chart_data, request.strategy_persona, request.chart_screenshot)
     return {
         "sentiment": ai_result.get("sentiment", "NEUTRAL"),
         "narrative": ai_result.get("narrative", "Analysis failed."),
         "key_level": ai_result.get("key_level"),
-        "goldbach_levels": [] # No overlays in AI mode for now, or maybe add them too?
+        "goldbach_levels": []
     }
 
 if __name__ == "__main__":
