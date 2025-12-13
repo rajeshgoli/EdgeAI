@@ -10,8 +10,13 @@ interface StrategyCardProps {
 }
 
 const StrategyCard: React.FC<StrategyCardProps> = ({ analysis, loading, outcome, gameState }) => {
+  console.log("StrategyCard render:", { loading, gameState, hasAnalysis: !!analysis });
+
   // Don't show if not in analyzed or revealed state (unless loading)
-  if (!loading && gameState !== 'ANALYZED' && gameState !== 'REVEALED') return null;
+  if (!loading && gameState !== 'ANALYZED' && gameState !== 'REVEALED') {
+    console.log("StrategyCard: returning null (not in right state)");
+    return null;
+  }
 
   if (loading) {
     return (
@@ -31,7 +36,11 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ analysis, loading, outcome,
     );
   }
 
-  if (!analysis) return null;
+  if (!analysis) {
+    console.log("StrategyCard: returning null (no analysis data)");
+    return null;
+  }
+  console.log("StrategyCard: RENDERING CARD", analysis);
 
   const isBullish = analysis.sentiment === 'BULLISH';
   const isNeutral = analysis.sentiment === 'NEUTRAL';

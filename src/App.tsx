@@ -1,224 +1,185 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Sidebar from './components/Sidebar';
-import ControlBar from './components/ControlBar';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Sidebar } from './components/Sidebar';
 import Chart, { ChartHandle } from './components/Chart';
-import ErrorBoundary from './components/ErrorBoundary';
-import StrategyCard from './components/StrategyCard';
+import { ControlBar } from './components/ControlBar';
+import { AnalysisOverlay } from './components/AnalysisOverlay';
 import { spinWheel, analyzeMarket, getGoldbachLevels } from './services/api';
-import { Candle, GameState, AnalysisResult, TradeResult, PriceLevel } from './types';
-import { Cpu } from 'lucide-react';
+import { Candle, GameState, AnalysisResult, TradeOutcome, PriceLevel, TradeStats } from './types';
 
-const App: React.FC = () => {
-  // --- Data State ---
-  const [allData, setAllData] = useState<Candle[]>([]); // Kept for compatibility if needed
-  const [currentVisibleData, setCurrentVisibleData] = useState<Candle[]>([]);
+function App() {
+  const [visibleData, setVisibleData] = useState<Candle[]>([]);
   const [futureData, setFutureData] = useState<Candle[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const [priceLines, setPriceLines] = useState<PriceLevel[]>([]);
-  const [strategyPersona, setStrategyPersona] = useState<string | undefined>(undefined);
-  const [isGoldbachMode, setIsGoldbachMode] = useState(false);
-
-  // --- Game State ---
-  const [gameState, setGameState] = useState<GameState>('IDLE');
+  const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [tradeResult, setTradeResult] = useState<TradeResult | null>(null);
+  const [outcome, setOutcome] = useState<TradeOutcome | null>(null);
+  const [strategyPersona, setStrategyPersona] = useState<string | null>(null);
+  const [priceLines, setPriceLines] = useState<PriceLevel[]>([]);
+  const [isGoldbachMode, setIsGoldbachMode] = useState<boolean>(false);
+  const [tradeStats, setTradeStats] = useState<TradeStats>({ wins: 0, losses: 0, cumulativePnl: 0 });
 
-  // --- Refs ---
   const chartRef = useRef<ChartHandle>(null);
 
-  // --- Initialization ---
+  // Initialize data from backend
   useEffect(() => {
-    // Load data from API
-    const loadData = async () => {
-      try {
-        const response = await spinWheel();
-        setCurrentVisibleData(response.past_data);
-        setFutureData(response.future_data);
-        setDataLoaded(true);
-        setGameState('READY');
-      } catch (error) {
-        console.error("Failed to load data", error);
-      }
-    };
-    loadData();
+    handleSpin();
   }, []);
 
-  // --- Handlers ---
-
-  const handleSpin = useCallback(async () => {
-    // Reset States
-    setAnalysis(null);
-    setTradeResult(null);
-    setPriceLines([]);
-    chartRef.current?.reset();
-
+  const handleSpin = async () => {
     try {
       const response = await spinWheel();
-      setCurrentVisibleData(response.past_data);
+      setVisibleData(response.past_data);
       setFutureData(response.future_data);
-      setGameState('READY');
+      setGameState(GameState.READY);
+      setAnalysis(null);
+      setOutcome(null);
+      setPriceLines([]); // Clear price lines on new spin
     } catch (error) {
-      console.error("Failed to spin", error);
+      console.error('Failed to spin:', error);
     }
-  }, []);
+  };
 
   const handleAnalyze = useCallback(async () => {
-    setGameState('ANALYZING');
-    setIsAnalyzing(true);
+    setGameState(GameState.ANALYZING);
 
     try {
-      // Capture screenshot for Gemini analysis
-      let screenshot: string | undefined;
-      try {
-        screenshot = chartRef.current?.getScreenshot() || undefined;
-        console.log("Screenshot captured:", screenshot ? `yes (${screenshot.length} chars)` : "no");
-      } catch (screenshotError) {
-        console.warn("Screenshot capture failed:", screenshotError);
-        screenshot = undefined;
-      }
+      // Capture screenshot before analysis (for AI enhancement)
+      const screenshot = chartRef.current?.getScreenshot() || undefined;
 
-      // Call Real API with screenshot
-      console.log("Calling analyzeMarket API...");
-      const result = await analyzeMarket(currentVisibleData, strategyPersona, screenshot);
-      console.log("Analysis result:", result);
+      const result = await analyzeMarket(visibleData, strategyPersona || undefined, screenshot);
 
-      // Map Goldbach levels to PriceLines if available
-      if (result.goldbach_levels) {
-        const lines: PriceLevel[] = result.goldbach_levels.map(l => ({
-          price: l.price,
-          color: l.color,
-          title: l.label
+      // Map backend response to AnalysisResult format
+      const currentPrice = visibleData[visibleData.length - 1]?.close || 0;
+      const mappedResult: AnalysisResult = {
+        type: result.sentiment === 'BULLISH' ? 'BULLISH' : 'BEARISH',
+        pattern: result.narrative || 'Goldbach Analysis',
+        confidence: (result.confidence || 75) / 100,
+        entry: currentPrice,
+        target: result.targetPrice || currentPrice * 1.01,
+        stopLoss: result.stopLoss || currentPrice * 0.99,
+        reasoning: result.reasoning || result.narrative || 'Analysis based on Goldbach methodology',
+        goldbach_levels: result.goldbach_levels,
+        dealing_range: result.dealing_range,
+      };
+
+      setAnalysis(mappedResult);
+
+      // Map goldbach_levels to PriceLevel[] for chart drawing
+      if (result.goldbach_levels && result.goldbach_levels.length > 0) {
+        const levels: PriceLevel[] = result.goldbach_levels.map((level: any) => ({
+          price: level.price,
+          color: level.color || '#ffffff',
+          title: level.label || '',
         }));
-        setPriceLines(lines);
+        setPriceLines(levels);
       }
 
-      setAnalysis(result);
-      setGameState('ANALYZED');
+      setGameState(GameState.ANALYZED);
     } catch (error) {
-      console.error("Analysis failed", error);
-      // Reset state so user can try again
-      setGameState('READY');
-    } finally {
-      setIsAnalyzing(false);
+      console.error('Analysis failed:', error);
+      setGameState(GameState.READY);
     }
-  }, [currentVisibleData, strategyPersona]);
+  }, [visibleData, strategyPersona]);
 
-  // Handle visible range changes - update Goldbach levels dynamically
+  const handleReveal = useCallback(() => {
+    if (!analysis || futureData.length === 0) return;
+
+    // Combine data
+    const combined = [...visibleData, ...futureData];
+    setVisibleData(combined);
+
+    // Calculate outcome
+    const startPrice = futureData[0].open;
+    const endPrice = futureData[futureData.length - 1].close;
+    const isBullish = analysis.type === 'BULLISH';
+    const marketWentUp = endPrice > startPrice;
+    const won = (isBullish && marketWentUp) || (!isBullish && !marketWentUp);
+    const pnl = ((endPrice - startPrice) / startPrice) * 100;
+
+    const actualPnl = isBullish ? pnl : -pnl;
+
+    setOutcome({
+      won,
+      pnlPercentage: actualPnl,
+      finalPrice: endPrice,
+    });
+
+    // Update trade stats
+    setTradeStats(prev => ({
+      wins: prev.wins + (won ? 1 : 0),
+      losses: prev.losses + (won ? 0 : 1),
+      cumulativePnl: prev.cumulativePnl + actualPnl,
+    }));
+
+    setGameState(GameState.REVEALED);
+  }, [analysis, futureData, visibleData]);
+
+  const handleStrategyCompiled = (persona: string) => {
+    console.log('Strategy compiled:', persona);
+    setStrategyPersona(persona);
+    // Enable Goldbach mode when persona is GOLDBACH_MODE
+    setIsGoldbachMode(persona === 'GOLDBACH_MODE');
+  };
+
+  // Dynamic zoom handler - recalculates Goldbach levels when user zooms
   const handleVisibleRangeChange = useCallback(async (high: number, low: number, currentPrice: number) => {
-    if (!isGoldbachMode) return;
+    // Only recalculate in Goldbach mode (explicit or default when no persona) and after initial analysis
+    const isGoldbachActive = isGoldbachMode || !strategyPersona || strategyPersona === 'GOLDBACH_MODE';
+    if (!isGoldbachActive || gameState !== GameState.ANALYZED) return;
 
     try {
       const result = await getGoldbachLevels(high, low, currentPrice);
-      const lines: PriceLevel[] = result.levels.map(l => ({
-        price: l.price,
-        color: l.color,
-        title: l.label
-      }));
-      setPriceLines(lines);
+
+      // Map the new levels to PriceLevel[] format
+      if (result.levels && result.levels.length > 0) {
+        const levels: PriceLevel[] = result.levels.map((level: any) => ({
+          price: level.price,
+          color: level.color || '#ffffff',
+          title: level.label || '',
+        }));
+        setPriceLines(levels);
+      }
     } catch (error) {
-      console.error("Failed to update Goldbach levels", error);
+      console.error('Failed to update Goldbach levels:', error);
     }
-  }, [isGoldbachMode]);
-
-  const handleReveal = useCallback(() => {
-    if (futureData.length === 0) return;
-
-    // Stream the future candles one by one for effect (or chunks)
-    chartRef.current?.appendData(futureData);
-
-    // Calculate Result
-    const startPrice = futureData[0].open;
-    const endPrice = futureData[futureData.length - 1].close;
-
-    // Simple logic: Did it go in the direction of the sentiment?
-    const isBullish = analysis?.sentiment === 'BULLISH';
-    const marketWentUp = endPrice > startPrice;
-    const won = (isBullish && marketWentUp) || (!isBullish && !marketWentUp);
-
-    const pnl = ((endPrice - startPrice) / startPrice) * 100;
-
-    setTradeResult({
-      won,
-      pnlPercent: isBullish ? pnl : -pnl,
-      finalPrice: endPrice
-    });
-
-    setGameState('REVEALED');
-  }, [futureData, analysis]);
-
-  // --- Render ---
-
-  if (!dataLoaded) {
-    return (
-      <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 animate-pulse mb-4">
-          <Cpu className="text-white w-6 h-6" />
-        </div>
-        <h2 className="text-xl font-mono tracking-widest text-slate-400 animate-pulse">LOADING MARKET DATA...</h2>
-      </div>
-    );
-  }
+  }, [isGoldbachMode, strategyPersona, gameState]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0a1628] text-slate-200">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-200 selection:bg-cyan-500/30">
+      <Sidebar onStrategyCompiled={handleStrategyCompiled} tradeStats={tradeStats} />
 
-      {/* Left Sidebar */}
-      <Sidebar onStrategyCompiled={(persona) => {
-        console.log("Strategy Compiled:", persona);
-        setStrategyPersona(persona);
-        // Activate Goldbach mode if the persona indicates it
-        if (persona === 'GOLDBACH_MODE') {
-          setIsGoldbachMode(true);
-          // Trigger initial Goldbach level calculation
-          const range = chartRef.current?.getVisibleRange();
-          if (range) {
-            handleVisibleRangeChange(range.high, range.low, range.currentPrice);
-          }
-        } else {
-          setIsGoldbachMode(false);
-        }
-      }} />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative border-l border-slate-800/30">
-
+      <div className="flex-1 flex flex-col relative">
         {/* Header/Top Bar */}
-        <div className="h-12 flex items-center justify-between px-6 border-b border-slate-800/30">
-          <div className="flex items-center gap-6">
-            <span className="text-sm text-slate-400">ASSET: <span className="font-semibold text-white">S&P 500 (ES)</span></span>
-            <span className="text-sm text-slate-400">SESSION: <span className="font-semibold text-emerald-400">4H</span></span>
+        <div className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-sm z-10">
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-bold text-slate-500 tracking-widest">ASSET: <span className="text-white">S&P 500 (ES)</span></span>
+            <span className="text-xs font-bold text-slate-500 tracking-widest">SESSION: <span className="text-emerald-400">4H</span></span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-            <span className="text-xs text-emerald-400">CONNECTED</span>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-[10px] text-emerald-500 font-mono">CONNECTED</span>
           </div>
         </div>
 
         {/* Main Chart Area */}
-        <div className="flex-1 relative overflow-hidden">
-          <div className="w-full h-full">
-            {gameState === 'IDLE' && (
-              <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/60 backdrop-blur-sm">
-                <div className="text-center">
-                  <h2 className="text-3xl font-bold text-white mb-2">Ready to Backtest?</h2>
-                  <p className="text-slate-400">Click "Spin" to load a random historical scenario.</p>
-                </div>
-              </div>
-            )}
+        <div className="flex-1 relative bg-gradient-to-b from-slate-900 via-slate-950 to-black">
+           {/* Grid Pattern Overlay */}
+           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
 
-            <ErrorBoundary>
+           <div className="absolute inset-0 p-4">
               <Chart
                 ref={chartRef}
-                data={currentVisibleData}
+                data={visibleData}
                 lines={priceLines}
-                onVisibleRangeChange={isGoldbachMode ? handleVisibleRangeChange : undefined}
+                onVisibleRangeChange={handleVisibleRangeChange}
               />
-            </ErrorBoundary>
-          </div>
+           </div>
 
-          {/* Analysis Overlay */}
-          <StrategyCard analysis={analysis} loading={isAnalyzing} outcome={tradeResult} gameState={gameState} />
+           {/* Analysis Overlay */}
+           <AnalysisOverlay
+             gameState={gameState}
+             analysis={analysis}
+             outcome={outcome}
+           />
         </div>
 
         {/* Bottom Control Bar */}
@@ -227,11 +188,10 @@ const App: React.FC = () => {
           onSpin={handleSpin}
           onAnalyze={handleAnalyze}
           onReveal={handleReveal}
-          onReset={handleSpin}
         />
       </div>
     </div>
   );
-};
+}
 
 export default App;

@@ -1,55 +1,71 @@
+export interface Candle {
+  time: number; // Unix timestamp
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export enum GameState {
+  IDLE = 'IDLE',
+  READY = 'READY',
+  ANALYZING = 'ANALYZING',
+  ANALYZED = 'ANALYZED',
+  REVEALED = 'REVEALED',
+}
+
+export interface AnalysisResult {
+  type: 'BULLISH' | 'BEARISH';
+  sentiment?: string; // Backend compatibility
+  pattern: string;
+  confidence: number;
+  entry: number;
+  target: number;
+  targetPrice?: number; // Backend compatibility
+  stopLoss: number;
+  reasoning: string;
+  narrative?: string; // Backend compatibility
+  goldbach_levels?: GoldbachLevel[];
+  dealing_range?: any;
+  current_status?: any;
+  signals?: any[];
+}
+
+export interface TradeOutcome {
+  won: boolean;
+  pnlPercentage: number;
+  finalPrice: number;
+}
+
+export interface TradeStats {
+  wins: number;
+  losses: number;
+  cumulativePnl: number;
+}
+
+// Backend types
 export interface SpinResponse {
   past_data: Candle[];
   future_data: Candle[];
 }
 
-export interface Candle {
-  time: string; // YYYY-MM-DD format for Lightweight Charts
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
+export interface GoldbachLevel {
+  price: number;
+  label: string;
+  color: string;
 }
 
-export type GameState = 'IDLE' | 'READY' | 'ANALYZING' | 'ANALYZED' | 'REVEALED';
-
-export interface Signal {
-  type: string;
-  detected: boolean;
-  details: string;
-}
-
-export interface AnalysisResult {
-  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  pattern?: string;
-  entryPrice?: number;
-  targetPrice?: number;
-  stopLoss?: number;
-  reasoning?: string; // narrative from backend
-  confidence?: number;
-
-  // Goldbach Specific
-  narrative?: string;
-  goldbach_levels?: { price: number; label: string; color: string }[];
-  dealing_range?: { po3_size: number; low: number; high: number };
-  current_status?: { price: number; zone: string; nearest_level: string };
-  signals?: Signal[];
-}
-
-export interface TradeResult {
-  won: boolean;
-  pnlPercent: number;
-  finalPrice: number;
+export interface GoldbachLevelsResponse {
+  levels: GoldbachLevel[];
+  dealing_range: {
+    low: number;
+    high: number;
+    po3_size: number;
+  };
 }
 
 export interface PriceLevel {
   price: number;
   color: string;
   title: string;
-}
-
-export interface GoldbachLevelsResponse {
-  levels: { price: number; label: string; color: string; ratio: number }[];
-  dealing_range: { po3_size: number; low: number; high: number };
 }

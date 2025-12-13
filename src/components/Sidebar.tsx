@@ -1,14 +1,22 @@
 import React, { useState, useRef } from 'react';
-import { Settings, FileText, Cpu } from 'lucide-react';
+import { Settings, FileText, Cpu, Paperclip, X } from 'lucide-react';
 import { compileStrategy } from '../services/api';
 
-interface SidebarProps {
-  onStrategyCompiled: (persona: string) => void;
+interface TradeStats {
+  wins: number;
+  losses: number;
+  cumulativePnl: number;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled }) => {
+interface SidebarProps {
+  onStrategyCompiled?: (persona: string) => void;
+  tradeStats?: TradeStats;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,65 +25,73 @@ const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled }) => {
 
     setFileName(file.name);
     setIsUploading(true);
+    setUploadStatus('idle');
 
     try {
       const result = await compileStrategy(file);
-      onStrategyCompiled(result.persona);
+      setUploadStatus('success');
+      if (onStrategyCompiled) {
+        onStrategyCompiled(result.persona);
+      }
     } catch (err) {
-      console.error(err);
-      setFileName(null);
+      console.error('Failed to upload strategy:', err);
+      setUploadStatus('error');
     } finally {
       setIsUploading(false);
     }
   };
 
+  const handleRemoveFile = () => {
+    setFileName(null);
+    setUploadStatus('idle');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
-    <div className="w-[380px] h-full bg-[#0f172a]/90 backdrop-blur-sm flex flex-col flex-shrink-0 border-r border-slate-700/30">
-      {/* Logo Section */}
-      <div className="p-6 pb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center">
-            <Cpu className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-white">Edge.ai</h1>
-            <p className="text-[11px] text-slate-500 tracking-wider">SYSTEM V.2.1</p>
-          </div>
+    <div className="w-80 h-full bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 flex flex-col p-6 flex-shrink-0">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <Cpu className="text-white w-6 h-6" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            Edge.ai
+          </h1>
+          <p className="text-xs text-slate-500 font-mono">SYSTEM V.2.1</p>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 px-6 space-y-6 overflow-y-auto">
-
-        {/* Strategy Config Section */}
+      <div className="flex-1 space-y-6">
         <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Settings className="w-4 h-4 text-slate-400" />
-            <span className="text-sm font-medium text-slate-300">STRATEGY CONFIG</span>
-          </div>
-          <div className="bg-[#1e293b]/60 rounded-lg border border-slate-700/40 p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-slate-400">ACTIVE MODEL</span>
-              <span className="text-sm font-medium text-emerald-400">GOLDBACH-ALPHA</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-400">TIMEFRAME</span>
-              <span className="text-sm font-medium text-white">4H</span>
-            </div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-400 mb-3">
+            <Settings className="w-4 h-4" />
+            STRATEGY CONFIG
+          </label>
+          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/60 shadow-inner">
+             <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500">ACTIVE MODEL</span>
+                <span className="text-xs text-emerald-400 font-mono">GOLDBACH-ALPHA</span>
+             </div>
+             <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500">TIMEFRAME</span>
+                <span className="text-xs text-slate-300 font-mono">4H</span>
+             </div>
           </div>
         </div>
 
-        {/* Context Section */}
         <div>
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="w-4 h-4 text-slate-400" />
-            <span className="text-sm font-medium text-slate-300">CONTEXT (PDF/TEXT)</span>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-400 mb-3">
+            <FileText className="w-4 h-4" />
+            CONTEXT (PDF/TEXT)
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="ml-auto px-3 py-1 text-xs font-medium bg-[#1e293b] hover:bg-[#334155] text-slate-300 rounded border border-slate-600/50 transition-colors"
+              className="ml-auto flex items-center gap-1 px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors disabled:opacity-50"
             >
-              {isUploading ? 'Loading...' : 'Preview'}
+              <Paperclip className="w-3 h-3" />
+              {isUploading ? 'Uploading...' : 'Attach'}
             </button>
             <input
               ref={fileInputRef}
@@ -84,30 +100,73 @@ const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled }) => {
               className="hidden"
               onChange={handleFileUpload}
             />
-          </div>
-          <div className="bg-[#1e293b]/60 rounded-lg border border-slate-700/40 p-4">
-            <textarea
-              className="w-full h-36 bg-transparent text-sm text-slate-400 placeholder-slate-500 resize-none focus:outline-none leading-relaxed"
-              placeholder={`// Paste your strategy logic here...
-// e.g. 'Look for Fair Value Gaps on 4H timeframe with RSI divergence...'
+          </label>
 
-(System currently running default Goldbach Trend logic)`}
-            />
-          </div>
+          {/* Attached File Display */}
+          {fileName && (
+            <div className={`mb-3 p-2 rounded-lg border flex items-center justify-between ${
+              uploadStatus === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : uploadStatus === 'error'
+                ? 'bg-red-500/10 border-red-500/30'
+                : 'bg-slate-800/50 border-slate-700'
+            }`}>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <FileText className={`w-4 h-4 flex-shrink-0 ${
+                  uploadStatus === 'success' ? 'text-emerald-400' :
+                  uploadStatus === 'error' ? 'text-red-400' : 'text-slate-400'
+                }`} />
+                <span className="text-xs text-slate-300 truncate font-mono">{fileName}</span>
+              </div>
+              <button
+                onClick={handleRemoveFile}
+                className="text-slate-500 hover:text-red-400 transition-colors p-1"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {uploadStatus === 'success' && (
+            <p className="text-xs text-emerald-400 mb-2">Strategy compiled successfully!</p>
+          )}
+          {uploadStatus === 'error' && (
+            <p className="text-xs text-red-400 mb-2">Failed to compile strategy. Try again.</p>
+          )}
+
+          {!fileName && (
+            <p className="text-xs text-slate-500 italic">
+              Attach a PDF/TXT to customize strategy. Default: Goldbach Trend
+            </p>
+          )}
         </div>
 
-        {/* Live Telemetry Section */}
-        <div className="bg-[#1e293b]/40 rounded-lg border border-cyan-500/20 p-4">
-          <h3 className="text-sm font-semibold text-cyan-400 mb-3">LIVE TELEMETRY</h3>
-          <div className="h-1 w-full bg-slate-700/50 rounded-full overflow-hidden mb-2">
-            <div className="h-full bg-cyan-500 w-1/2 rounded-full"></div>
-          </div>
-          <p className="text-xs text-cyan-400/70 tracking-wide">NEURAL ENGINE ONLINE</p>
+        <div className="mt-8 p-4 rounded-xl border border-cyan-500/10 bg-cyan-500/5">
+            <h3 className="text-cyan-400 text-xs font-bold mb-2">PERFORMANCE</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center">
+                <div className="text-xl font-bold text-emerald-400 font-mono">
+                  {tradeStats?.wins ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Wins</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-rose-400 font-mono">
+                  {tradeStats?.losses ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Losses</div>
+              </div>
+              <div className="text-center">
+                <div className={`text-xl font-bold font-mono ${
+                  (tradeStats?.cumulativePnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {(tradeStats?.cumulativePnl ?? 0) >= 0 ? '+' : ''}{(tradeStats?.cumulativePnl ?? 0).toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider">P&L</div>
+              </div>
+            </div>
         </div>
-
       </div>
     </div>
   );
 };
-
-export default Sidebar;

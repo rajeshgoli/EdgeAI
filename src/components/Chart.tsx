@@ -191,6 +191,20 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
     };
   }, [onVisibleRangeChange]);
 
+  // Handle data updates when data prop changes
+  useEffect(() => {
+    if (!seriesRef.current || data.length === 0) return;
+
+    // Sort and deduplicate data
+    const sortedData = [...data].sort((a, b) => (a.time > b.time ? 1 : -1));
+    const uniqueData = sortedData.filter((item, index, self) =>
+      index === 0 || item.time !== self[index - 1].time
+    );
+    seriesRef.current.setData(uniqueData as CandlestickData[]);
+    dataRef.current = data;
+    chartRef.current?.timeScale().fitContent();
+  }, [data]);
+
   // Handle Price Lines
   useEffect(() => {
     if (!seriesRef.current) return;

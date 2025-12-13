@@ -7,71 +7,65 @@ interface ControlBarProps {
   onSpin: () => void;
   onAnalyze: () => void;
   onReveal: () => void;
-  onReset: () => void;
 }
 
-const ControlBar: React.FC<ControlBarProps> = ({ gameState, onSpin, onAnalyze, onReveal }) => {
-
-  const isSpinDisabled = gameState === 'ANALYZING';
-  const isAnalyzeDisabled = gameState !== 'READY';
-  const isRevealDisabled = gameState !== 'ANALYZED';
+export const ControlBar: React.FC<ControlBarProps> = ({ gameState, onSpin, onAnalyze, onReveal }) => {
+  
+  const isSpinDisabled = gameState === GameState.ANALYZING || gameState === GameState.ANALYZED;
+  const isAnalyzeDisabled = gameState !== GameState.READY;
+  const isRevealDisabled = gameState !== GameState.ANALYZED;
 
   return (
-    <div className="h-24 bg-[#0f172a] border-t border-slate-800/50 flex items-center justify-center gap-6">
-
-      {/* SPIN Button */}
-      <button
+    <div className="h-24 bg-slate-900/80 backdrop-blur-md border-t border-slate-800 flex items-center justify-center gap-6 px-6">
+      
+      <button 
         onClick={onSpin}
         disabled={isSpinDisabled}
         className={`
-          flex items-center justify-center gap-2.5 h-12 px-8 rounded-full font-medium text-sm transition-all
-          ${isSpinDisabled
-            ? 'bg-slate-700/40 text-slate-500 cursor-not-allowed'
-            : 'bg-slate-700 hover:bg-slate-600 text-white'}
+          flex items-center gap-2 px-8 py-4 rounded-full font-bold text-sm tracking-wider transition-all duration-300
+          ${isSpinDisabled 
+            ? 'opacity-30 cursor-not-allowed bg-slate-800 text-slate-500' 
+            : 'bg-slate-800 hover:bg-slate-700 text-white hover:scale-105 shadow-lg shadow-black/20'}
         `}
       >
-        <Dices className="w-4 h-4" />
-        SPIN
+        <Dices className="w-5 h-5" />
+        {gameState === GameState.REVEALED ? 'NEXT SETUP' : 'SPIN'}
       </button>
 
-      {/* ANALYZE Button */}
-      <button
+      <button 
         onClick={onAnalyze}
         disabled={isAnalyzeDisabled}
         className={`
-          flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-medium text-sm transition-all
+          flex items-center gap-2 px-10 py-4 rounded-full font-bold text-sm tracking-wider transition-all duration-300
           ${isAnalyzeDisabled
-            ? 'bg-slate-700/40 text-slate-500 cursor-not-allowed'
-            : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40'}
+            ? 'opacity-30 cursor-not-allowed bg-slate-800 text-slate-500 border border-slate-700'
+            : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:shadow-cyan-500/25 hover:scale-105 shadow-lg border border-cyan-500/50'}
         `}
       >
-        {gameState === 'ANALYZING' ? (
-          <span className="animate-pulse">ANALYZING...</span>
+        {gameState === GameState.ANALYZING ? (
+           <span className="animate-pulse">PROCESSING...</span>
         ) : (
-          <>
-            <BrainCircuit className="w-4 h-4" />
-            ANALYZE
-          </>
+           <>
+             <BrainCircuit className="w-5 h-5" />
+             ANALYZE
+           </>
         )}
       </button>
 
-      {/* REVEAL Button */}
-      <button
+      <button 
         onClick={onReveal}
         disabled={isRevealDisabled}
         className={`
-          flex items-center justify-center gap-2.5 h-12 px-8 rounded-full font-medium text-sm transition-all
+          flex items-center gap-2 px-8 py-4 rounded-full font-bold text-sm tracking-wider transition-all duration-300
           ${isRevealDisabled
-            ? 'bg-transparent text-slate-600 cursor-not-allowed border border-slate-700/50'
-            : 'bg-slate-700 hover:bg-slate-600 text-white'}
+            ? 'opacity-30 cursor-not-allowed bg-slate-800 text-slate-500'
+            : 'bg-emerald-600 hover:bg-emerald-500 text-white hover:shadow-emerald-500/25 hover:scale-105 shadow-lg'}
         `}
       >
-        <Eye className="w-4 h-4" />
+        <Eye className="w-5 h-5" />
         REVEAL
       </button>
 
     </div>
   );
 };
-
-export default ControlBar;
