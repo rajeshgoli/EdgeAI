@@ -178,6 +178,7 @@ def calculate_goldbach_for_range(visible_high: float, visible_low: float, curren
     """
     Calculate Goldbach levels based on visible chart range.
     Used for dynamic updates when user zooms.
+    Shows up to 3 consecutive zones if price range spans multiple.
     """
     visible_range = visible_high - visible_low
 
@@ -185,20 +186,63 @@ def calculate_goldbach_for_range(visible_high: float, visible_low: float, curren
     po3s = [3, 9, 27, 81, 243, 729, 2187, 6561]
 
     # Find nearest PO3 to the visible range
-    best_po3 = min(po3s, key=lambda x: abs(x - visible_range))
+    # Use a PO3 that's roughly 1/3 to 1/2 of the visible range for better coverage
+    best_po3 = min(po3s, key=lambda x: abs(x - visible_range / 2))
 
-    # Calculate dealing range
-    range_low, range_high = calculate_dealing_range(current_price, best_po3)
+    # Calculate the primary dealing range (contains current price)
+    primary_low, primary_high = calculate_dealing_range(current_price, best_po3)
 
-    # Get levels
-    levels = get_goldbach_levels(range_low, range_high)
+    # Determine which zones are needed to cover the visible range
+    # Start from the zone containing the lowest visible price
+    start_zone_low = math.floor(visible_low / best_po3) * best_po3
+    end_zone_low = math.floor(visible_high / best_po3) * best_po3
+
+    # Calculate how many zones we need (cap at 3)
+    num_zones = min(3, int((end_zone_low - start_zone_low) / best_po3) + 1)
+
+    # Generate levels for all needed zones
+    all_levels = []
+    dealing_ranges = []
+
+    for i in range(num_zones):
+        zone_low = start_zone_low + (i * best_po3)
+        zone_high = zone_low + best_po3
+
+        # Only include zones that overlap with visible range
+        if zone_high < visible_low or zone_low > visible_high:
+            continue
+
+        dealing_ranges.append({
+            "low": zone_low,
+            "high": zone_high
+        })
+
+        # Get levels for this zone with zone indicator in label
+        zone_levels = get_goldbach_levels(zone_low, zone_high)
+
+        # Add zone prefix to labels if multiple zones
+        if num_zones > 1:
+            for level in zone_levels:
+                # Add zone range to distinguish levels from different zones
+                level['label'] = f"[{int(zone_low)}-{int(zone_high)}] {level['label']}"
+
+        all_levels.extend(zone_levels)
+
+    # Remove duplicate price levels (keep first occurrence)
+    seen_prices = set()
+    unique_levels = []
+    for level in all_levels:
+        if level['price'] not in seen_prices:
+            seen_prices.add(level['price'])
+            unique_levels.append(level)
 
     return {
-        "levels": levels,
+        "levels": unique_levels,
         "dealing_range": {
             "po3_size": best_po3,
-            "low": range_low,
-            "high": range_high
+            "low": primary_low,
+            "high": primary_high,
+            "all_ranges": dealing_ranges
         }
     }
 

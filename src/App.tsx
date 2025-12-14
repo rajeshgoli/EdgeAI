@@ -13,9 +13,11 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [outcome, setOutcome] = useState<TradeOutcome | null>(null);
   const [strategyPersona, setStrategyPersona] = useState<string | null>(null);
+  const [strategyLabel, setStrategyLabel] = useState<string>('none');
   const [priceLines, setPriceLines] = useState<PriceLevel[]>([]);
   const [isGoldbachMode, setIsGoldbachMode] = useState<boolean>(false);
   const [tradeStats, setTradeStats] = useState<TradeStats>({ wins: 0, losses: 0, cumulativePnl: 0 });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const chartRef = useRef<ChartHandle>(null);
 
@@ -40,6 +42,7 @@ function App() {
 
   const handleAnalyze = useCallback(async () => {
     setGameState(GameState.ANALYZING);
+    setErrorMessage(null);
 
     try {
       // Capture screenshot before analysis (for AI enhancement)
@@ -51,12 +54,12 @@ function App() {
       const currentPrice = visibleData[visibleData.length - 1]?.close || 0;
       const mappedResult: AnalysisResult = {
         type: result.sentiment === 'BULLISH' ? 'BULLISH' : 'BEARISH',
-        pattern: result.narrative || 'Goldbach Analysis',
+        pattern: result.narrative || 'Analysis Complete',
         confidence: (result.confidence || 75) / 100,
         entry: currentPrice,
         target: result.targetPrice || currentPrice * 1.01,
         stopLoss: result.stopLoss || currentPrice * 0.99,
-        reasoning: result.reasoning || result.narrative || 'Analysis based on Goldbach methodology',
+        reasoning: result.reasoning || result.narrative || 'Technical analysis complete.',
         goldbach_levels: result.goldbach_levels,
         dealing_range: result.dealing_range,
       };
@@ -74,8 +77,19 @@ function App() {
       }
 
       setGameState(GameState.ANALYZED);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Analysis failed:', error);
+      // Parse user-friendly error message
+      const errorStr = error?.message || String(error);
+      if (errorStr.includes('429') || errorStr.includes('quota') || errorStr.includes('rate')) {
+        setErrorMessage('API rate limit exceeded. Please wait a minute and try again.');
+      } else if (errorStr.includes('401') || errorStr.includes('API key')) {
+        setErrorMessage('API key error. Please check your configuration.');
+      } else if (errorStr.includes('network') || errorStr.includes('fetch')) {
+        setErrorMessage('Network error. Please check your connection.');
+      } else {
+        setErrorMessage('Analysis failed. Please try again.');
+      }
       setGameState(GameState.READY);
     }
   }, [visibleData, strategyPersona]);
@@ -91,11 +105,28 @@ function App() {
     const startPrice = futureData[0].open;
     const endPrice = futureData[futureData.length - 1].close;
     const isBullish = analysis.type === 'BULLISH';
-    const marketWentUp = endPrice > startPrice;
-    const won = (isBullish && marketWentUp) || (!isBullish && !marketWentUp);
-    const pnl = ((endPrice - startPrice) / startPrice) * 100;
+    const priceChange = endPrice - startPrice;
+    const marketWentUp = priceChange > 0;
 
-    const actualPnl = isBullish ? pnl : -pnl;
+    // Win if prediction matches market direction
+    const won = (isBullish && marketWentUp) || (!isBullish && !marketWentUp);
+
+    // P&L: positive when we profit, negative when we lose
+    // Long (bullish): profit when price goes up
+    // Short (bearish): profit when price goes down
+    const pnlPercentage = (priceChange / startPrice) * 100;
+    const actualPnl = isBullish ? pnlPercentage : -pnlPercentage;
+
+    console.log('Reveal calculation:', {
+      startPrice,
+      endPrice,
+      priceChange,
+      isBullish,
+      marketWentUp,
+      won,
+      pnlPercentage,
+      actualPnl
+    });
 
     setOutcome({
       won,
@@ -113,18 +144,24 @@ function App() {
     setGameState(GameState.REVEALED);
   }, [analysis, futureData, visibleData]);
 
-  const handleStrategyCompiled = (persona: string) => {
-    console.log('Strategy compiled:', persona);
+  const handleStrategyCompiled = (persona: string, label: string) => {
+    console.log('Strategy compiled:', persona, 'Label:', label);
     setStrategyPersona(persona);
+    setStrategyLabel(label);
     // Enable Goldbach mode when persona is GOLDBACH_MODE
     setIsGoldbachMode(persona === 'GOLDBACH_MODE');
   };
 
+  const handleStrategyCleared = () => {
+    setStrategyPersona(null);
+    setStrategyLabel('none');
+    setIsGoldbachMode(false);
+  };
+
   // Dynamic zoom handler - recalculates Goldbach levels when user zooms
   const handleVisibleRangeChange = useCallback(async (high: number, low: number, currentPrice: number) => {
-    // Only recalculate in Goldbach mode (explicit or default when no persona) and after initial analysis
-    const isGoldbachActive = isGoldbachMode || !strategyPersona || strategyPersona === 'GOLDBACH_MODE';
-    if (!isGoldbachActive || gameState !== GameState.ANALYZED) return;
+    // Only recalculate in explicit Goldbach mode and after initial analysis
+    if (!isGoldbachMode || gameState !== GameState.ANALYZED) return;
 
     try {
       const result = await getGoldbachLevels(high, low, currentPrice);
@@ -141,11 +178,16 @@ function App() {
     } catch (error) {
       console.error('Failed to update Goldbach levels:', error);
     }
-  }, [isGoldbachMode, strategyPersona, gameState]);
+  }, [isGoldbachMode, gameState]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-200 selection:bg-cyan-500/30">
-      <Sidebar onStrategyCompiled={handleStrategyCompiled} tradeStats={tradeStats} />
+      <Sidebar
+        onStrategyCompiled={handleStrategyCompiled}
+        onStrategyCleared={handleStrategyCleared}
+        activeModel={strategyLabel}
+        tradeStats={tradeStats}
+      />
 
       <div className="flex-1 flex flex-col relative">
         {/* Header/Top Bar */}
@@ -180,6 +222,22 @@ function App() {
              analysis={analysis}
              outcome={outcome}
            />
+
+           {/* Error Message Toast */}
+           {errorMessage && (
+             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top duration-300">
+               <div className="flex items-center gap-3 px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-lg backdrop-blur-xl">
+                 <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+                 <span className="text-rose-400 text-sm">{errorMessage}</span>
+                 <button
+                   onClick={() => setErrorMessage(null)}
+                   className="text-rose-400 hover:text-rose-300 ml-2"
+                 >
+                   ✕
+                 </button>
+               </div>
+             </div>
+           )}
         </div>
 
         {/* Bottom Control Bar */}

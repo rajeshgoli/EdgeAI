@@ -9,11 +9,13 @@ interface TradeStats {
 }
 
 interface SidebarProps {
-  onStrategyCompiled?: (persona: string) => void;
+  onStrategyCompiled?: (persona: string, label: string) => void;
+  onStrategyCleared?: () => void;
+  activeModel?: string;
   tradeStats?: TradeStats;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, onStrategyCleared, activeModel, tradeStats }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -31,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats
       const result = await compileStrategy(file);
       setUploadStatus('success');
       if (onStrategyCompiled) {
-        onStrategyCompiled(result.persona);
+        onStrategyCompiled(result.persona, result.label || 'custom');
       }
     } catch (err) {
       console.error('Failed to upload strategy:', err);
@@ -46,6 +48,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats
     setUploadStatus('idle');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (onStrategyCleared) {
+      onStrategyCleared();
     }
   };
 
@@ -72,7 +77,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats
           <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/60 shadow-inner">
              <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-slate-500">ACTIVE MODEL</span>
-                <span className="text-xs text-emerald-400 font-mono">GOLDBACH-ALPHA</span>
+                <span className={`text-xs font-mono ${activeModel && activeModel !== 'none' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {activeModel?.toUpperCase() || 'NONE'}
+                </span>
              </div>
              <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">TIMEFRAME</span>
@@ -136,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats
 
           {!fileName && (
             <p className="text-xs text-slate-500 italic">
-              Attach a PDF/TXT to customize strategy. Default: Goldbach Trend
+              Attach a PDF/TXT to customize the analysis strategy.
             </p>
           )}
         </div>
@@ -160,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onStrategyCompiled, tradeStats
                 <div className={`text-xl font-bold font-mono ${
                   (tradeStats?.cumulativePnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}>
-                  {(tradeStats?.cumulativePnl ?? 0) >= 0 ? '+' : ''}{(tradeStats?.cumulativePnl ?? 0).toFixed(1)}%
+                  {(tradeStats?.cumulativePnl ?? 0) >= 0 ? '+' : ''}{(tradeStats?.cumulativePnl ?? 0).toFixed(2)}%
                 </div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-wider">P&L</div>
               </div>

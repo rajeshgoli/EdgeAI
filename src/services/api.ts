@@ -10,7 +10,7 @@ export const spinWheel = async (): Promise<SpinResponse> => {
     return response.json();
 };
 
-export const compileStrategy = async (file: File): Promise<{ persona: string }> => {
+export const compileStrategy = async (file: File): Promise<{ persona: string; label: string }> => {
     const formData = new FormData();
     formData.append('file', file);
 

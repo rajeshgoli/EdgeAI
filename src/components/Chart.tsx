@@ -213,6 +213,31 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
     priceLinesRef.current.forEach(line => seriesRef.current?.removePriceLine(line));
     priceLinesRef.current = [];
 
+    // Helper to convert color to semi-transparent rgba
+    const toSemiTransparent = (color: string, opacity: number = 0.4): string => {
+      const colorMap: Record<string, string> = {
+        'red': `rgba(239, 68, 68, ${opacity})`,
+        'green': `rgba(34, 197, 94, ${opacity})`,
+        'yellow': `rgba(234, 179, 8, ${opacity})`,
+        'white': `rgba(255, 255, 255, ${opacity})`,
+        'gray': `rgba(148, 163, 184, ${opacity})`,
+      };
+      // If it's a known color name, convert it
+      if (colorMap[color.toLowerCase()]) {
+        return colorMap[color.toLowerCase()];
+      }
+      // If it's already a hex color, convert to rgba
+      if (color.startsWith('#')) {
+        const hex = color.slice(1);
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      }
+      // Return as-is if already rgba or unknown
+      return color;
+    };
+
     // Add new lines
     lines.forEach(line => {
       if (typeof line.price !== 'number' || isNaN(line.price)) {
@@ -220,13 +245,30 @@ const Chart = forwardRef<ChartHandle, ChartProps>((props, ref) => {
         return;
       }
 
+      // Only label key levels: Range High, Range Low, and Equilibrium
+      const title = line.title || '';
+      const isKeyLevel = title.includes('Range High') ||
+                         title.includes('Range Low') ||
+                         title.includes('Equilibrium') ||
+                         title.includes('(1.0)') ||
+                         title.includes('(0.0)') ||
+                         title.includes('(0.5)');
+
+      // Shorter labels for key levels
+      let displayTitle = '';
+      if (isKeyLevel) {
+        if (title.includes('Range High') || title.includes('(1.0)')) displayTitle = 'HIGH';
+        else if (title.includes('Range Low') || title.includes('(0.0)')) displayTitle = 'LOW';
+        else if (title.includes('Equilibrium') || title.includes('(0.5)')) displayTitle = 'EQ';
+      }
+
       const priceLine = seriesRef.current?.createPriceLine({
         price: line.price,
-        color: line.color,
-        lineWidth: 2,
-        lineStyle: 2, // Dashed
-        axisLabelVisible: true,
-        title: line.title,
+        color: toSemiTransparent(line.color, isKeyLevel ? 0.6 : 0.25),
+        lineWidth: isKeyLevel ? 2 : 1,
+        lineStyle: isKeyLevel ? 0 : 2, // Solid for key levels, dashed for others
+        axisLabelVisible: isKeyLevel,
+        title: displayTitle,
       });
       if (priceLine) {
         priceLinesRef.current.push(priceLine);

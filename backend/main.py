@@ -53,11 +53,13 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     sentiment: str
     narrative: str
-    key_level: Optional[float]
+    key_level: Optional[float] = None
     goldbach_levels: Optional[List[dict]] = None
     dealing_range: Optional[Dict[str, Any]] = None
     current_status: Optional[Dict[str, Any]] = None
     signals: Optional[List[Dict[str, Any]]] = None
+    reasoning: Optional[str] = None
+    confidence: Optional[int] = None
 
 class GoldbachLevelsRequest(BaseModel):
     visible_high: float
@@ -97,20 +99,23 @@ async def spin_wheel():
 @app.post("/compile_strategy")
 async def api_compile_strategy(file: UploadFile = File(...)):
     content = await file.read()
-    text = content.decode("utf-8", errors="ignore") # Simple decoding for now
-    
-    # Check for Goldbach Trigger
-    if file.filename.lower().startswith("goldbach") and file.filename.lower().endswith(".pdf"):
-        return {"persona": "GOLDBACH_MODE"}
+    text = content.decode("utf-8", errors="ignore")
 
-    # Default AI Compilation
-    persona = compile_strategy(text)
-    return {"persona": persona}
+    # Check for Goldbach in filename or content
+    filename_lower = file.filename.lower() if file.filename else ""
+    text_lower = text.lower()
+
+    if "goldbach" in filename_lower or "goldbach" in text_lower or "power of 3" in text_lower or "po3" in text_lower:
+        return {"persona": "GOLDBACH_MODE", "label": "goldbach"}
+
+    # AI Compilation - returns both persona and label
+    result = compile_strategy(text)
+    return {"persona": result["persona"], "label": result["label"]}
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
-    # Mode A: Goldbach (Explicit or Default)
-    if request.strategy_persona == "GOLDBACH_MODE" or not request.strategy_persona:
+    # Mode A: Goldbach (Only when explicitly set)
+    if request.strategy_persona == "GOLDBACH_MODE":
         # Run mathematical Goldbach analysis first
         goldbach_result = run_goldbach_analysis(request.chart_data)
 
@@ -143,12 +148,16 @@ async def analyze(request: AnalyzeRequest):
         }
 
     # Mode B: AI Analysis with optional screenshot
-    ai_result = analyze_chart(request.chart_data, request.strategy_persona, request.chart_screenshot)
+    # Use a generic persona if none provided
+    persona = request.strategy_persona or "You are a technical analyst. Analyze the chart for trends, support/resistance levels, and potential trade setups. Be concise and actionable."
+    ai_result = analyze_chart(request.chart_data, persona, request.chart_screenshot)
     return {
         "sentiment": ai_result.get("sentiment", "NEUTRAL"),
-        "narrative": ai_result.get("narrative", "Analysis failed."),
+        "narrative": ai_result.get("narrative", "Analysis complete."),
         "key_level": ai_result.get("key_level"),
-        "goldbach_levels": []
+        "goldbach_levels": [],
+        "reasoning": ai_result.get("reasoning"),
+        "confidence": ai_result.get("confidence")
     }
 
 if __name__ == "__main__":
