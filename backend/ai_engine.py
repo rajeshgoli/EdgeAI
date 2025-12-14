@@ -107,10 +107,23 @@ def analyze_chart(chart_data: list, strategy_persona: str, chart_screenshot: str
     except Exception as e:
         print(f"Error analyzing chart: {e}")
         error_str = str(e).lower()
-        # Check for rate limit errors
+        # Return a fallback response instead of raising an exception
+        # This prevents 500 errors and gives the frontend something to display
         if '429' in error_str or 'quota' in error_str or 'rate' in error_str:
-            raise Exception("API rate limit exceeded. Please wait and try again.")
-        raise Exception("Analysis temporarily unavailable. Please try again.")
+            return {
+                "sentiment": "NEUTRAL",
+                "narrative": "API rate limit exceeded. Please wait a moment and try again.",
+                "key_level": None,
+                "reasoning": "The AI service is temporarily unavailable due to rate limiting.",
+                "confidence": 0
+            }
+        return {
+            "sentiment": "NEUTRAL",
+            "narrative": "Analysis temporarily unavailable. Please try again.",
+            "key_level": None,
+            "reasoning": f"AI analysis error: {str(e)[:100]}",
+            "confidence": 0
+        }
 
 def analyze_chart_with_goldbach(chart_data: list, goldbach_result: dict, chart_screenshot: str = None) -> dict:
     """
